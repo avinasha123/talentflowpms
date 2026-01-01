@@ -63,6 +63,13 @@ const FeedbackPage: React.FC<FeedbackPageProps> = ({ user }) => {
       questions: nominateMessage,
     });
     
+    // Simulate notification
+    if (user.role !== 'MANAGER') {
+      alert("Nomination submitted! A notification has been sent to your manager for approval.");
+    } else {
+      alert("Nomination sent! The peer has been notified.");
+    }
+
     setIsNominateOpen(false);
     setNominatePeerId('');
     setNominateMessage('');
