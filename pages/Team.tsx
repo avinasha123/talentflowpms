@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { User, FeedbackRequest, FeedbackRequestStatus } from '../types';
 import { db } from '../services/mockDataService';
-import { MoreVertical, Mail, TrendingUp, Check, X, Shield, Users } from 'lucide-react';
+import { MoreVertical, Mail, TrendingUp, Check, X, Shield, Loader2 } from 'lucide-react';
 
 interface TeamProps {
   user: User;
@@ -11,6 +11,7 @@ const Team: React.FC<TeamProps> = ({ user }) => {
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [pendingRequests, setPendingRequests] = useState<FeedbackRequest[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -22,7 +23,6 @@ const Team: React.FC<TeamProps> = ({ user }) => {
     setTeamMembers(allUsersData.filter(u => u.id !== user.id));
 
     // Get all requests and filter for those needing approval (where target is in my team)
-    // In a real app, query by managerId. Here, we filter.
     const allReqs = await db.getAllFeedbackRequests();
     const teamIds = allUsersData.filter(u => u.id !== user.id).map(u => u.id);
     
@@ -37,11 +37,18 @@ const Team: React.FC<TeamProps> = ({ user }) => {
   };
 
   const handleApproval = async (req: FeedbackRequest, approved: boolean) => {
-    await db.updateFeedbackRequest({
-      ...req,
-      status: approved ? FeedbackRequestStatus.PENDING_FEEDBACK : FeedbackRequestStatus.REJECTED
-    });
-    loadData();
+    setProcessingId(req.id);
+    try {
+      await db.updateFeedbackRequest({
+        ...req,
+        status: approved ? FeedbackRequestStatus.PENDING_FEEDBACK : FeedbackRequestStatus.REJECTED
+      });
+      await loadData();
+    } catch (error) {
+      console.error("Error updating request:", error);
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   return (
@@ -62,30 +69,44 @@ const Team: React.FC<TeamProps> = ({ user }) => {
         </h2>
         
         {pendingRequests.length === 0 ? (
-          <p className="text-slate-500 italic text-sm">No pending feedback nominations to review.</p>
+          <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+             <Shield className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+             <p className="text-slate-500 italic text-sm">No pending nominations to review.</p>
+          </div>
         ) : (
           <div className="grid gap-3">
              {pendingRequests.map(req => (
-               <div key={req.id} className="flex flex-col sm:flex-row justify-between items-center p-4 bg-slate-50 rounded-lg border border-slate-100">
+               <div key={req.id} className="flex flex-col sm:flex-row justify-between items-center p-4 bg-slate-50 rounded-lg border border-slate-100 transition-all hover:border-blue-200">
                   <div className="mb-3 sm:mb-0">
                     <p className="font-medium text-slate-900">
                       <span className="font-bold">{getUserName(req.requesterId)}</span> wants to nominate 
                       <span className="font-bold text-blue-600"> {getUserName(req.reviewerId)}</span> for feedback.
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">Request Date: {req.createdAt} • Context: "{req.questions || 'General'}"</p>
+                    <div className="flex items-center mt-1 space-x-2">
+                       <span className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                          {req.createdAt}
+                       </span>
+                       <span className="text-xs text-slate-500 truncate max-w-md">
+                          Context: "{req.questions || 'General'}"
+                       </span>
+                    </div>
                   </div>
                   <div className="flex space-x-2">
                     <button 
                       onClick={() => handleApproval(req, false)}
-                      className="flex items-center px-3 py-1.5 bg-white border border-slate-300 text-slate-600 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-sm font-medium transition-colors"
+                      disabled={processingId === req.id}
+                      className="flex items-center px-3 py-1.5 bg-white border border-slate-300 text-slate-600 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-sm font-medium transition-colors disabled:opacity-50"
                     >
-                      <X size={14} className="mr-1"/> Reject
+                      {processingId === req.id ? <Loader2 className="animate-spin mr-1" size={14}/> : <X size={14} className="mr-1"/>} 
+                      Reject
                     </button>
                     <button 
                       onClick={() => handleApproval(req, true)}
-                      className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors"
+                      disabled={processingId === req.id}
+                      className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors disabled:opacity-50"
                     >
-                      <Check size={14} className="mr-1"/> Approve
+                      {processingId === req.id ? <Loader2 className="animate-spin mr-1" size={14}/> : <Check size={14} className="mr-1"/>}
+                      Approve
                     </button>
                   </div>
                </div>
